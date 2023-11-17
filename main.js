@@ -3,8 +3,25 @@ var MIN = Math.min
 var MAX = Math.max
 var ABS = Math.abs
 var ROUND = Math.round
-var MODEL_COUNT = 100
+var MODEL_COUNT = 10
 var randomInt = (min, max) => Math.floor(Math.random() * (max - min + 1) + min)
+
+class Vector2 {
+  constructor (x, y) {
+    this.x = x
+    this.y = y
+    this.elements = [x, y]
+  }
+}
+
+class Vector3 {
+  constructor (x, y, z) {
+    this.x = x
+    this.y = y
+    this.z = z
+    this.elements = [x, y, z]
+  }
+}
 
 class Color {
   constructor(r = 255, g = 255, b = 255, a = 255) {
@@ -20,7 +37,7 @@ var BLACK = new Color(0, 0, 0)
 var RED = new Color(255, 0, 0)
 var GREEN = new Color(0, 255, 0)
 var BLUE = new Color(0, 0, 255)
-var COLORS = [RED, GREEN, BLUE, BLACK]
+var COLORS = [RED, GREEN, BLUE]
 
 function lerpRGB(color1, color2, t) {
   var r = color1.r + ((color2.r - color1.r) * t)
@@ -30,32 +47,45 @@ function lerpRGB(color1, color2, t) {
 }
 
 function makeBox() {
-  var x = randomInt(0, 300)
-  var y = randomInt(0, 300)
+  var [x, y] = new Vector2(randomInt(0, 300), randomInt(0, 300)).elements
   var size = randomInt(10, 50)
   var speed = randomInt(1, 10)
 
   var box =  new Box(x, y, size, size)
+  box.fill = true
   box.speed = speed 
 
   return box
 }
 
+function makeStrokeBox() {
+  var box = makeBox()
+  box.fill = false
+  return box
+}
+
 function makeTriangle() {
-  var v1 = { x: randomInt(20, 400), y: randomInt(20, 400) }
-  var v2 = { x: randomInt(20, 400), y: randomInt(20, 400) }
-  var v3 = { x: randomInt(20, 400), y: randomInt(20, 400) }
+  var v1 = new Vector2(randomInt(20, 400), randomInt(20, 400))
+  var v2 = new Vector2(randomInt(20, 400), randomInt(20, 400))
+  var v3 = new Vector2(randomInt(20, 400), randomInt(20, 400))
 
   var speed = randomInt(1, 10)
   var triangle =  new Triangle(v1, v2, v3)
+  triangle.fill = true
   triangle.speed = speed 
 
   return triangle
 }
 
+function makeStrokeTriangle() {
+  var triangle = makeTriangle()
+  triangle.fill = false 
+  return triangle
+}
+
 function makeLine() {
-  var v1 = { x: randomInt(0, 400), y: randomInt(0, 400) }
-  var v2 = { x: randomInt(0, 400), y: randomInt(0, 400) }
+  var v1 = new Vector2(randomInt(20, 400), randomInt(20, 400))
+  var v2 = new Vector2(randomInt(20, 400), randomInt(20, 400))
   return new Line(v1, v2)
 }
 
@@ -112,6 +142,18 @@ class PixelManager {
     }
   }
 
+  strokeRectangle(x0, y0, width, height, color) {
+    var vertex1 = new Vector2(x0, y0) 
+    var vertex2 = new Vector2(x0 + width, y0) 
+    var vertex3 = new Vector2(x0 + width, y0 + height) 
+    var vertex4 = new Vector2(x0, y0 + height) 
+
+    this.fillLine(vertex1, vertex2, color)
+    this.fillLine(vertex2, vertex3, color)
+    this.fillLine(vertex3, vertex4, color)
+    this.fillLine(vertex4, vertex1, color)
+  }
+
   isTopLeft(start, end) {
     var edge = { x: end.x - start.x, y: end.y - start.y}
     var is_top_edge = edge.y == 0 && edge.x > 0
@@ -153,23 +195,30 @@ class PixelManager {
 
     // Loop all candidate pixels inside the bounding box
     for (var y = y_min; y <= y_max; y++) {
-      var w0 = w1_row
-      var w1 = w2_row
-      var w2 = w3_row
+      var w1 = w1_row
+      var w2 = w2_row
+      var w3 = w3_row
 
       for (var x = x_min; x <= x_max; x++) {
-        var is_inside = w0 >= 0 && w1 >= 0 && w2 >= 0
+        var is_inside = w1 >= 0 && w2 >= 0 && w3 >= 0
         if (is_inside) {
           this.setLocation(x, y, color)
         }
-        w0 += delta_w1_col
-        w1 += delta_w2_col
-        w2 += delta_w3_col
+        w1 += delta_w1_col
+        w2 += delta_w2_col
+        w3 += delta_w3_col
       }
+
       w1_row += delta_w1_row
       w2_row += delta_w2_row
       w3_row += delta_w3_row
     }
+  }
+
+  strokeTriangle(v1, v2, v3, color) {
+    this.fillLine(v1, v2, color)
+    this.fillLine(v2, v3, color)
+    this.fillLine(v3, v1, color)
   }
 
   fillLine(v1, v2, color) {
@@ -178,8 +227,9 @@ class PixelManager {
     var dx = v2x - v1x
     var dy = v2y - v1y
 
-    if (dx === 0 && dy === 0) this.setLocation(v1x, v1y, color)
-    else if (ABS(dy) > ABS(dx)) {
+    if (dx === 0 && dy === 0) {
+      this.setLocation(v1x, v1y, color)
+    } else if (ABS(dy) > ABS(dx)) {
       if (dy < 0) {
         var _v1 = v1
         var v1 = v2
@@ -189,7 +239,7 @@ class PixelManager {
       }
 
       var slope = dx / dy
-      var y = ROUND(v1y)
+      var y = v1y
       var lastY
       for(var x = v1x; y < v2y; y += 1, x += slope) {
         lastY = y
@@ -209,9 +259,9 @@ class PixelManager {
       }
 
       var slope = dy / dx
-      var x = ROUND(v1x)
+      var x = v1x
       var lastX
-      for(var y = v1y; x < v2x; x += 1, y += slope ) {
+      for(var y = v1y; x < v2x; x += 1, y += slope) {
         lastX = x
         this.setLocation(ROUND(lastX), ROUND(y), color)
       }
@@ -269,9 +319,9 @@ class Scene {
     this.pixels = new PixelManager(this.ctx.getImageData(0, 0, this.width, this.height))
 
     // models
-    this.boxes = Array.from(Array(0)).map(() => makeBox())
-    this.lines = Array.from(Array(MODEL_COUNT)).map(() => makeLine())
-    this.triangles = Array.from(Array(0)).map(() => makeTriangle())
+    this.lines       = Array.from(Array(0)).map(() => makeLine())
+    this.boxes       = Array.from(Array(MODEL_COUNT)).map(() => makeStrokeBox())
+    this.triangles   = Array.from(Array(MODEL_COUNT)).map(() => makeStrokeTriangle())
   }
 
   clear() {
@@ -309,11 +359,19 @@ class Scene {
 
   endFrame() {
     for (const box of this.boxes) {
-      this.pixels.fillRectangle(box.x, box.y, box.width, box.height, box.color)
+      if (box.fill) {
+        this.pixels.fillRectangle(box.x, box.y, box.width, box.height, box.color)
+      } else {
+        this.pixels.strokeRectangle(box.x, box.y, box.width, box.height, box.color)
+      }
     }
 
     for (const triangle of this.triangles) {
-      this.pixels.fillTriangle(triangle.v1, triangle.v2, triangle.v3, triangle.color)
+      if (triangle.fill) {
+        this.pixels.fillTriangle(triangle.v1, triangle.v2, triangle.v3, triangle.color)
+      } else {
+        this.pixels.strokeTriangle(triangle.v1, triangle.v2, triangle.v3, triangle.color)
+      }
     }
 
     for (const line of this.lines) {
