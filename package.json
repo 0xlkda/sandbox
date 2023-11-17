@@ -1,0 +1,9 @@
+{
+  "type": "module",
+  "scripts": {
+    "start": "parcel index.html --open"
+  },
+  "devDependencies": {
+    "parcel": "^2.10.3"
+  }
+}
