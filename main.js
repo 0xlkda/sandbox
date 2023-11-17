@@ -1,7 +1,9 @@
 var RENDER_ONLY_ONCE = false
 var MIN = Math.min
 var MAX = Math.max
-var MODEL_COUNT = 10
+var ABS = Math.abs
+var ROUND = Math.round
+var MODEL_COUNT = 100
 var randomInt = (min, max) => Math.floor(Math.random() * (max - min + 1) + min)
 
 class Color {
@@ -40,15 +42,21 @@ function makeBox() {
 }
 
 function makeTriangle() {
-  var v0 = { x: randomInt(20, 400), y: randomInt(20, 400) }
   var v1 = { x: randomInt(20, 400), y: randomInt(20, 400) }
   var v2 = { x: randomInt(20, 400), y: randomInt(20, 400) }
+  var v3 = { x: randomInt(20, 400), y: randomInt(20, 400) }
 
   var speed = randomInt(1, 10)
-  var triangle =  new Triangle(v0, v1, v2)
+  var triangle =  new Triangle(v1, v2, v3)
   triangle.speed = speed 
 
   return triangle
+}
+
+function makeLine() {
+  var v1 = { x: randomInt(0, 400), y: randomInt(0, 400) }
+  var v2 = { x: randomInt(0, 400), y: randomInt(0, 400) }
+  return new Line(v1, v2)
 }
 
 class PixelManager {
@@ -117,60 +125,110 @@ class PixelManager {
     return ab.x * ap.y - ab.y * ap.x
   }
 
-  fillTriangle(v0, v1, v2, color) {
+  fillTriangle(v1, v2, v3, color) {
     // Finds the bounding box with all candidate pixels
-    var x_min = MIN(MIN(v0.x, v1.x), v2.x)
-    var y_min = MIN(MIN(v0.y, v1.y), v2.y)
-    var x_max = MAX(MAX(v0.x, v1.x), v2.x)
-    var y_max = MAX(MAX(v0.y, v1.y), v2.y)
+    var x_min = MIN(MIN(v1.x, v2.x), v3.x)
+    var y_min = MIN(MIN(v1.y, v2.y), v3.y)
+    var x_max = MAX(MAX(v1.x, v2.x), v3.x)
+    var y_max = MAX(MAX(v1.y, v2.y), v3.y)
 
     // Compute the constant delta_s that will be used for the horizontal and vertical steps
-    var delta_w0_col = (v1.y - v2.y)
-    var delta_w1_col = (v2.y - v0.y)
-    var delta_w2_col = (v0.y - v1.y)
-    var delta_w0_row = (v2.x - v1.x)
-    var delta_w1_row = (v0.x - v2.x)
-    var delta_w2_row = (v1.x - v0.x)
+    var delta_w1_col = (v2.y - v3.y)
+    var delta_w2_col = (v3.y - v1.y)
+    var delta_w3_col = (v1.y - v2.y)
+    var delta_w1_row = (v3.x - v2.x)
+    var delta_w2_row = (v1.x - v3.x)
+    var delta_w3_row = (v2.x - v1.x)
 
     // Rasterization fill convention (top-left rule)
-    var bias0 = this.isTopLeft(v1, v2) ? 0 : -1
-    var bias1 = this.isTopLeft(v2, v0) ? 0 : -1
-    var bias2 = this.isTopLeft(v0, v1) ? 0 : -1
+    var bias1 = this.isTopLeft(v2, v3) ? 0 : -1
+    var bias2 = this.isTopLeft(v3, v1) ? 0 : -1
+    var bias3 = this.isTopLeft(v1, v2) ? 0 : -1
 
     // Compute the edge functions for the fist (top-left) point
     var p0 = { x: x_min, y: y_min}
-    var w0_row = this.edgeCross(v1, v2, p0) + bias0
-    var w1_row = this.edgeCross(v2, v0, p0) + bias1
-    var w2_row = this.edgeCross(v0, v1, p0) + bias2
+    var w1_row = this.edgeCross(v2, v3, p0) + bias1
+    var w2_row = this.edgeCross(v3, v1, p0) + bias2
+    var w3_row = this.edgeCross(v1, v2, p0) + bias3
 
     // Loop all candidate pixels inside the bounding box
     for (var y = y_min; y <= y_max; y++) {
-      var w0 = w0_row
-      var w1 = w1_row
-      var w2 = w2_row
+      var w0 = w1_row
+      var w1 = w2_row
+      var w2 = w3_row
 
       for (var x = x_min; x <= x_max; x++) {
         var is_inside = w0 >= 0 && w1 >= 0 && w2 >= 0
         if (is_inside) {
           this.setLocation(x, y, color)
         }
-        w0 += delta_w0_col
-        w1 += delta_w1_col
-        w2 += delta_w2_col
+        w0 += delta_w1_col
+        w1 += delta_w2_col
+        w2 += delta_w3_col
       }
-      w0_row += delta_w0_row
       w1_row += delta_w1_row
       w2_row += delta_w2_row
+      w3_row += delta_w3_row
+    }
+  }
+
+  fillLine(v1, v2, color) {
+    var v1x = v1.x, v1y = v1.y
+    var v2x = v2.x, v2y = v2.y
+    var dx = v2x - v1x
+    var dy = v2y - v1y
+
+    if (dx === 0 && dy === 0) this.setLocation(v1x, v1y, color)
+    else if (ABS(dy) > ABS(dx)) {
+      if (dy < 0) {
+        var _v1 = v1
+        var v1 = v2
+        var v2 = _v1
+        var v1x = v1.x, v1y = v1.y
+        var v2x = v2.x, v2y = v2.y
+      }
+
+      var slope = dx / dy
+      var y = ROUND(v1y)
+      var lastY
+      for(var x = v1x; y < v2y; y += 1, x += slope) {
+        lastY = y
+        this.setLocation(ROUND(x), ROUND(lastY), color)
+      }
+
+      if(v2y > lastY ) {
+        this.setLocation(ROUND(v2x), ROUND(v2y), color)
+      }
+    } else {
+      if (dx < 0) {
+        var _v1 = v1
+        var v1 = v2
+        var v2 = _v1
+        var v1x = v1.x, v1y = v1.y
+        var v2x = v2.x, v2y = v2.y
+      }
+
+      var slope = dy / dx
+      var x = ROUND(v1x)
+      var lastX
+      for(var y = v1y; x < v2x; x += 1, y += slope ) {
+        lastX = x
+        this.setLocation(ROUND(lastX), ROUND(y), color)
+      }
+
+      if( v2x > lastX ) {
+        this.setLocation(ROUND(v2x), ROUND(v2y), color)
+      }
     }
   }
 }
 
 class Triangle {
-  constructor(v0, v1, v2) {
-    this.v0 = v0
+  constructor(v1, v2, v3) {
     this.v1 = v1
     this.v2 = v2
-    this.position = { v0, v1, v2 }
+    this.v3 = v3
+    this.position = { v1, v2, v3 }
     this.speed = 1
     this.color = BLACK
   }
@@ -194,6 +252,15 @@ class Box {
   }
 }
 
+class Line {
+  constructor(v1, v2) {
+    this.v1 = v1
+    this.v2 = v2
+  }
+
+  move() {}
+} 
+
 class Scene {
   constructor(canvas) {
     this.ctx = canvas.getContext('2d') 
@@ -203,7 +270,8 @@ class Scene {
 
     // models
     this.boxes = Array.from(Array(0)).map(() => makeBox())
-    this.triangles = Array.from(Array(MODEL_COUNT)).map(() => makeTriangle())
+    this.lines = Array.from(Array(MODEL_COUNT)).map(() => makeLine())
+    this.triangles = Array.from(Array(0)).map(() => makeTriangle())
   }
 
   clear() {
@@ -228,6 +296,12 @@ class Scene {
       triangle.color = COLORS[randomInt(0, COLORS.length - 1)]
       triangle.move()
     }
+
+    for (const line of this.lines) {
+      if (isOut(line)) line.speed = -line.speed
+      line.color = COLORS[randomInt(0, COLORS.length - 1)]
+      line.move()
+    }
   }
 
   composeFrame(ms) {
@@ -239,7 +313,11 @@ class Scene {
     }
 
     for (const triangle of this.triangles) {
-      this.pixels.fillTriangle(triangle.v0, triangle.v1, triangle.v2, triangle.color)
+      this.pixels.fillTriangle(triangle.v1, triangle.v2, triangle.v3, triangle.color)
+    }
+
+    for (const line of this.lines) {
+      this.pixels.fillLine(line.v1, line.v2, line.color)
     }
 
     this.ctx.putImageData(this.pixels.imageData, 0, 0)
