@@ -1,3 +1,7 @@
+var RENDER_ONLY_ONCE = false
+var MIN = Math.min
+var MAX = Math.max
+var MODEL_COUNT = 10
 var randomInt = (min, max) => Math.floor(Math.random() * (max - min + 1) + min)
 
 class Color {
@@ -14,7 +18,7 @@ var BLACK = new Color(0, 0, 0)
 var RED = new Color(255, 0, 0)
 var GREEN = new Color(0, 255, 0)
 var BLUE = new Color(0, 0, 255)
-var RGB = [RED, GREEN, BLUE]
+var COLORS = [RED, GREEN, BLUE, BLACK]
 
 function lerpRGB(color1, color2, t) {
   var r = color1.r + ((color2.r - color1.r) * t)
@@ -35,6 +39,18 @@ function makeBox() {
   return box
 }
 
+function makeTriangle() {
+  var v0 = { x: randomInt(20, 400), y: randomInt(20, 400) }
+  var v1 = { x: randomInt(20, 400), y: randomInt(20, 400) }
+  var v2 = { x: randomInt(20, 400), y: randomInt(20, 400) }
+
+  var speed = randomInt(1, 10)
+  var triangle =  new Triangle(v0, v1, v2)
+  triangle.speed = speed 
+
+  return triangle
+}
+
 class PixelManager {
   BYTES_PER_PIXEL = 4
 
@@ -52,7 +68,9 @@ class PixelManager {
   }
 
   setLocation(x, y, color) {
+    if (x < 0 || y < 0) return
     if (x >= this.imageData.width || y >= this.imageData.height) return
+
     var i = this.locationToIndex(x, y)
     var { r, g, b, a } = color
     this.framebuffer[i+0] = r
@@ -85,6 +103,80 @@ class PixelManager {
       }
     }
   }
+
+  isTopLeft(start, end) {
+    var edge = { x: end.x - start.x, y: end.y - start.y}
+    var is_top_edge = edge.y == 0 && edge.x > 0
+    var is_left_edge = edge.y < 0
+    return is_left_edge || is_top_edge
+  }
+
+  edgeCross(a, b, p) {
+    var ab = { x: b.x - a.x, y: b.y - a.y }
+    var ap = { x: p.x - a.x, y: p.y - a.y }
+    return ab.x * ap.y - ab.y * ap.x
+  }
+
+  fillTriangle(v0, v1, v2, color) {
+    // Finds the bounding box with all candidate pixels
+    var x_min = MIN(MIN(v0.x, v1.x), v2.x)
+    var y_min = MIN(MIN(v0.y, v1.y), v2.y)
+    var x_max = MAX(MAX(v0.x, v1.x), v2.x)
+    var y_max = MAX(MAX(v0.y, v1.y), v2.y)
+
+    // Compute the constant delta_s that will be used for the horizontal and vertical steps
+    var delta_w0_col = (v1.y - v2.y)
+    var delta_w1_col = (v2.y - v0.y)
+    var delta_w2_col = (v0.y - v1.y)
+    var delta_w0_row = (v2.x - v1.x)
+    var delta_w1_row = (v0.x - v2.x)
+    var delta_w2_row = (v1.x - v0.x)
+
+    // Rasterization fill convention (top-left rule)
+    var bias0 = this.isTopLeft(v1, v2) ? 0 : -1
+    var bias1 = this.isTopLeft(v2, v0) ? 0 : -1
+    var bias2 = this.isTopLeft(v0, v1) ? 0 : -1
+
+    // Compute the edge functions for the fist (top-left) point
+    var p0 = { x: x_min, y: y_min}
+    var w0_row = this.edgeCross(v1, v2, p0) + bias0
+    var w1_row = this.edgeCross(v2, v0, p0) + bias1
+    var w2_row = this.edgeCross(v0, v1, p0) + bias2
+
+    // Loop all candidate pixels inside the bounding box
+    for (var y = y_min; y <= y_max; y++) {
+      var w0 = w0_row
+      var w1 = w1_row
+      var w2 = w2_row
+
+      for (var x = x_min; x <= x_max; x++) {
+        var is_inside = w0 >= 0 && w1 >= 0 && w2 >= 0
+        if (is_inside) {
+          this.setLocation(x, y, color)
+        }
+        w0 += delta_w0_col
+        w1 += delta_w1_col
+        w2 += delta_w2_col
+      }
+      w0_row += delta_w0_row
+      w1_row += delta_w1_row
+      w2_row += delta_w2_row
+    }
+  }
+}
+
+class Triangle {
+  constructor(v0, v1, v2) {
+    this.v0 = v0
+    this.v1 = v1
+    this.v2 = v2
+    this.position = { v0, v1, v2 }
+    this.speed = 1
+    this.color = BLACK
+  }
+
+  move() {
+  }
 }
 
 class Box {
@@ -110,7 +202,8 @@ class Scene {
     this.pixels = new PixelManager(this.ctx.getImageData(0, 0, this.width, this.height))
 
     // models
-    this.boxes = Array.from(Array(5)).map(() => makeBox())
+    this.boxes = Array.from(Array(0)).map(() => makeBox())
+    this.triangles = Array.from(Array(MODEL_COUNT)).map(() => makeTriangle())
   }
 
   clear() {
@@ -126,8 +219,14 @@ class Scene {
 
     for (const box of this.boxes) {
       if (isOut(box)) box.speed = -box.speed
-      box.color = RGB[randomInt(0, RGB.length - 1)]
+      box.color = COLORS[randomInt(0, COLORS.length - 1)]
       box.move()
+    }
+
+    for (const triangle of this.triangles) {
+      if (isOut(triangle)) triangle.speed = -triangle.speed
+      triangle.color = COLORS[randomInt(0, COLORS.length - 1)]
+      triangle.move()
     }
   }
 
@@ -138,6 +237,11 @@ class Scene {
     for (const box of this.boxes) {
       this.pixels.fillRectangle(box.x, box.y, box.width, box.height, box.color)
     }
+
+    for (const triangle of this.triangles) {
+      this.pixels.fillTriangle(triangle.v0, triangle.v1, triangle.v2, triangle.color)
+    }
+
     this.ctx.putImageData(this.pixels.imageData, 0, 0)
   }
 
@@ -164,10 +268,14 @@ class Sandbox {
   }
 
   requestFrame() {
-    this.nextFrame((dt) => {
-      this.requestFrame()
-      this.render(dt * 0.001)
-    })
+    if (RENDER_ONLY_ONCE) {
+      this.render(0)
+    } else {
+      this.nextFrame((dt) => {
+        this.requestFrame()
+        this.render(dt * 0.001)
+      })
+    }
 
     var msNow = performance.now()
     var msElapsed = msNow - this.lastRun
