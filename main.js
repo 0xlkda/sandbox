@@ -1,7 +1,39 @@
-var RED = { red:255, green:0, blue:0, alpha:255 }
-var GREEN = { red:0, green:255, blue:0, alpha:255 }
-var BLUE = { red:0, green:0, blue:255, alpha:255 }
-var WHITE = { red:255, green:255, blue:255, alpha:255 }
+var randomInt = (min, max) => Math.floor(Math.random() * (max - min + 1) + min)
+
+class Color {
+  constructor(r = 255, g = 255, b = 255, a = 255) {
+    this.r = r
+    this.g = g
+    this.b = b
+    this.a = a
+  }
+}
+
+var WHITE = new Color()
+var BLACK = new Color(0, 0, 0)
+var RED = new Color(255, 0, 0)
+var GREEN = new Color(0, 255, 0)
+var BLUE = new Color(0, 0, 255)
+var RGB = [RED, GREEN, BLUE]
+
+function lerpRGB(color1, color2, t) {
+  var r = color1.r + ((color2.r - color1.r) * t)
+  var g = color1.g + ((color2.g - color1.g) * t)
+  var b = color1.b + ((color2.b - color1.b) * t)
+  return new Color(r, g, b)
+}
+
+function makeBox() {
+  var x = randomInt(0, 300)
+  var y = randomInt(0, 300)
+  var size = randomInt(10, 50)
+  var speed = randomInt(1, 10)
+
+  var box =  new Box(x, y, size, size)
+  box.speed = speed 
+
+  return box
+}
 
 class PixelManager {
   BYTES_PER_PIXEL = 4
@@ -9,34 +41,32 @@ class PixelManager {
   constructor(imageData) {
     this.imageData = imageData
     this.framebuffer = this.imageData.data
-    this.stdout = ''
   }
 
   setIndex(i, color) {
-    if (i < 0 || i >= this.framebuffer.length) return
-    var { red, green, blue, alpha } = color
-    this.framebuffer[i+0] = red
-    this.framebuffer[i+1] = green
-    this.framebuffer[i+2] = blue
-    this.framebuffer[i+3] = alpha
+    var { r, g, b, a } = color
+    this.framebuffer[i+0] = r
+    this.framebuffer[i+1] = g
+    this.framebuffer[i+2] = b
+    this.framebuffer[i+3] = a
   }
 
   setLocation(x, y, color) {
     if (x >= this.imageData.width || y >= this.imageData.height) return
-    var { red, green, blue, alpha } = color
     var i = this.locationToIndex(x, y)
-    this.framebuffer[i+0] = red
-    this.framebuffer[i+1] = green
-    this.framebuffer[i+2] = blue
-    this.framebuffer[i+3] = alpha
+    var { r, g, b, a } = color
+    this.framebuffer[i+0] = r
+    this.framebuffer[i+1] = g
+    this.framebuffer[i+2] = b
+    this.framebuffer[i+3] = a
   }
 
   setAll(color) {
-    for (let index = 0; index < this.framebuffer.length; index++) {
+    for (let index = 0; index < this.framebuffer.length; index += this.BYTES_PER_PIXEL) {
       this.setIndex(index, color)
     }
   }
-  
+
   locationToIndex(x, y) {
     return (y * this.imageData.width + x) * this.BYTES_PER_PIXEL   
   }
@@ -57,7 +87,7 @@ class PixelManager {
   }
 }
 
-class Rect {
+class Box {
   constructor(x, y, width, height) {
     this.x = x
     this.y = y
@@ -65,7 +95,6 @@ class Rect {
     this.height = height
     this.position = { x, y }
     this.speed = 1
-    this.stdout = ''
   }
 
   move() {
@@ -81,17 +110,11 @@ class Scene {
     this.pixels = new PixelManager(this.ctx.getImageData(0, 0, this.width, this.height))
 
     // models
-    this.box1 = new Rect(0, 0, 10, 10)
-    this.box2 = new Rect(this.box1.x + 10, this.box1.y + 10, 10, 10)
-    this.box3 = new Rect(this.box1.x + 20, this.box1.y + 20, 10, 10)
-
-    this.box1.speed = 5
-    this.box2.speed = 8
-    this.box3.speed = 4
+    this.boxes = Array.from(Array(5)).map(() => makeBox())
   }
 
   clear() {
-    this.pixels.setAll(BLUE)
+    this.pixels.setAll(WHITE)
   }
 
   beginFrame() {
@@ -99,28 +122,27 @@ class Scene {
   }
 
   updateModel(ms) {
-    const isOut = p => (p.x) < 0 || (p.x + p.width) > this.width
-    if (isOut(this.box1)) this.box1.speed = -this.box1.speed
-    if (isOut(this.box2)) this.box2.speed = -this.box2.speed
-    if (isOut(this.box3)) this.box3.speed = -this.box3.speed
+    const isOut = p => (p.x + p.speed) <= 0 || (p.x + p.width) > this.width
 
-    this.box1.move()
-    this.box2.move()
-    this.box3.move()
+    for (const box of this.boxes) {
+      if (isOut(box)) box.speed = -box.speed
+      box.color = RGB[randomInt(0, RGB.length - 1)]
+      box.move()
+    }
   }
 
   composeFrame(ms) {
   }
 
   endFrame() {
-    this.pixels.fillRectangle(this.box1.x, this.box1.y, this.box1.width, this.box1.height, RED)
-    this.pixels.fillRectangle(this.box2.x, this.box2.y, this.box2.width, this.box2.height, GREEN)
-    this.pixels.fillRectangle(this.box3.x, this.box3.y, this.box3.width, this.box3.height, BLUE)
+    for (const box of this.boxes) {
+      this.pixels.fillRectangle(box.x, box.y, box.width, box.height, box.color)
+    }
     this.ctx.putImageData(this.pixels.imageData, 0, 0)
   }
 
   overlay() {
-    this.ctx.fillText(this.box1.stdout, 10, 10)
+    if (this.stdout) this.ctx.fillText(this.stdout, 10, 10)
   }
 }
 
@@ -181,7 +203,7 @@ window.addEventListener('load', function() {
   canvas.height = 400
 
   var sandbox = new Sandbox({
-    fps: 30,
+    fps: 60,
     width: canvas.width,
     height: canvas.height,
     canvas,
