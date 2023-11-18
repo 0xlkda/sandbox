@@ -1,26 +1,138 @@
 var RENDER_ONLY_ONCE = false
+var EPSILON = Number.EPSILON
+var PI = Math.PI
 var MIN = Math.min
 var MAX = Math.max
 var ABS = Math.abs
+var SIN = Math.sin
+var COS = Math.cos
 var ROUND = Math.round
 var MODEL_COUNT = 10
 var randomInt = (min, max) => Math.floor(Math.random() * (max - min + 1) + min)
 
-class Vector2 {
+class Vector {
+  static multiplyScalar(vector, scalar) {}
+  static multiplyMatrix(vector, matrix) {}
+  static multiply(lhs, rhs) {}
+}
+
+class Vector2 extends Vector {
   constructor (x, y) {
+    super()
     this.x = x
     this.y = y
     this.elements = [x, y]
   }
+
+  scaleX(k) { this.x *= k }
+  scaleY(k) { this.y *= k }
+  scale(k) { this.scaleX(k); this.scaleY(k) }
+
+  translateX(tx) { this.x += tx }
+  translateY(ty) { this.y += ty }
+  translate(tx, ty) { this.translateX(tx); this.translateY(ty) }
+
+  rotateX() {}
+  rotateY() {}
+  rotate() {}
 }
 
-class Vector3 {
+class Vector3 extends Vector {
   constructor (x, y, z) {
+    super()
     this.x = x
     this.y = y
     this.z = z
     this.elements = [x, y, z]
   }
+
+  scaleX(k) { this.x *= k }
+  scaleY(k) { this.y *= k }
+  scaleZ(k) { this.z *= k }
+  scale(k) { this.scaleX(k); this.scaleY(k); this.scaleZ(k) }
+
+  translateX(tx) { this.x += tx }
+  translateY(ty) { this.y += ty }
+  translateZ(tz) { this.z += tz }
+  translate(tx, ty, tz) { this.translateX(tx); this.translateY(ty); this.translateZ(tz) }
+
+  rotateX() {}
+  rotateY() {}
+  rotateZ() {}
+  rotate() {}
+}
+
+class Matrix {
+  static multiplyScalar(matrix, scalar) {}
+  static multiplyVector(matrix, vector) {}
+  static multiply(lhs, rhs) {}
+  static dot(lhs, rhs) {}
+  static cross(lhs, rhs) {}
+}
+
+class Matrix2 extends Matrix {
+  constructor(x11, x12, x21, x22) {
+    super()
+    this.x11 = x11
+    this.x12 = x12
+    this.x21 = x21
+    this.x22 = x22
+    this.elements [x11, x12, x21, x22] 
+  }
+
+  static identity() {
+    return new Matrix2(
+      1, 0,
+      0, 1
+    )
+  }
+  
+  static scaling(factor) {
+    return new Matrix2(
+      factor, 0,
+      0, factor
+    )
+  }
+
+  static rotation(theta) {
+    var cosT = COS(theta)
+    var sinT = SIN(theta)
+    return new Matrix2(
+      cosT, sinT,
+      -sinT, cosT,
+    )
+  }
+}
+
+class Matrix3 extends Matrix {
+  constructor(x11, x12, x13, x21, x22, x23, x31, x32, x33) {
+    super()
+    this.x11 = x11; this.x12 = x12; this.x13 = x13
+    this.x21 = x21; this.x22 = x22; this.x23 = x23
+    this.x31 = x31; this.x32 = x32; this.x33 = x33
+    this.elements [x11, x12, x13, x21, x22, x23, x31, x32, x33] 
+  }
+
+  static identity() {
+    return new Matrix3(
+      1, 0, 0,
+      0, 1, 0,
+      0, 0, 1,
+    )
+  }
+
+  static scaling(factor) {
+    return new Matrix3(
+      factor, 0, 0,
+      0, factor, 0,
+      0, 0, factor,
+    )
+  }
+
+  static rotationX(rad) {}
+  static rotationY(rad) {}
+  static rotationZ(rad) {}
+  static rotation(rad) {}
 }
 
 class Color {
@@ -233,12 +345,17 @@ class PixelManager {
   }
 }
 
+class Position extends Vector3 {
+  constructor(x, y, z) { 
+    super(x, y, z)
+  }
+}
+
 class Triangle {
   constructor(v1, v2, v3) {
     this.v1 = v1
     this.v2 = v2
     this.v3 = v3
-    this.position = { v1, v2, v3 }
     this.speed = 1
     this.color = BLACK
   }
@@ -284,24 +401,24 @@ class Triangle {
 
 class Box {
   constructor(x, y, width, height) {
-    this.x = x
-    this.y = y
+    this.position = new Position(x, y, 1)
     this.width = width
     this.height = height
-    this.position = { x, y }
-    this.speed = 1
+    this.speed = 10
+    this.friction = 0.5
   }
 
   draw(pixels) {
     if (this.fill) {
-      pixels.fillRectangle(this.x, this.y, this.width, this.height, this.color)
+      pixels.fillRectangle(this.position.x, this.position.y, this.width, this.height, this.color)
     } else {
-      pixels.strokeRectangle(this.x, this.y, this.width, this.height, this.color)
+      pixels.strokeRectangle(this.position.x, this.position.y, this.width, this.height, this.color)
     }
   }
 
   move() {
-    this.x += this.speed
+    this.position.translateX(this.speed)
+    this.position.translateY(this.speed)
   }
 
   static make() {
@@ -375,12 +492,21 @@ class Scene {
   }
 
   processModels(ms) {
-    const isOut = p => (p.x + p.speed) <= 0 || (p.x + p.width) > this.width
+    const isOffScreen = (model) => {
+      var outX = (model.position.x + model.speed + model.width)  >= this.width  || model.position.x + model.speed < 0
+      var outY = (model.position.y + model.speed + model.height) >= this.height || model.position.y + model.speed < 0
+      return outX || outY
+    }
 
     for (const model of this.models) {
-      if (isOut(model)) { model.speed = -model.speed }
       model.color = COLORS[randomInt(0, COLORS.length - 1)]
-      model.move()
+
+      if (model.position && isOffScreen(model)) { 
+        model.speed = model.speed * (model.friction || 1)
+        model.speed = -model.speed 
+      }
+
+      if (ABS(model.speed) > EPSILON) { model.move() }
     }
   }
 
