@@ -243,6 +243,14 @@ class Triangle {
     this.color = BLACK
   }
 
+  draw(pixels) {
+    if (this.fill) {
+      pixels.fillTriangle(this.v1, this.v2, this.v3, this.color)
+    } else {
+      pixels.strokeTriangle(this.v1, this.v2, this.v3, this.color)
+    }
+  }
+
   move() {
   }
 
@@ -284,6 +292,14 @@ class Box {
     this.speed = 1
   }
 
+  draw(pixels) {
+    if (this.fill) {
+      pixels.fillRectangle(this.x, this.y, this.width, this.height, this.color)
+    } else {
+      pixels.strokeRectangle(this.x, this.y, this.width, this.height, this.color)
+    }
+  }
+
   move() {
     this.x += this.speed
   }
@@ -318,7 +334,12 @@ class Line {
     this.v2 = v2
   }
 
+  draw(pixels) {
+    pixels.fillLine(this.v1, this.v2, this.color)
+  }
+
   move() {}
+
   static make() {
     var v1 = new Vector2(randomInt(20, 400), randomInt(20, 400))
     var v2 = new Vector2(randomInt(20, 400), randomInt(20, 400))
@@ -327,77 +348,61 @@ class Line {
 } 
 
 class Scene {
-  constructor(canvas) {
-    this.ctx = canvas.getContext('2d') 
-    this.width = canvas.width
-    this.height = canvas.height
-    this.pixels = new PixelManager(this.ctx.getImageData(0, 0, this.width, this.height))
+  constructor(width, height, pixels, renderer) {
+    this.width = width
+    this.height = height
+    this.pixels = pixels
+    this.renderer = renderer
 
     // models
-    this.lines       = Array.from(Array(0)).map(() => Line.make())
-    this.boxes       = Array.from(Array(MODEL_COUNT)).map(() => Box.makeStroke())
-    this.triangles   = Array.from(Array(MODEL_COUNT)).map(() => Triangle.makeStroke())
+    var lines       = Array.from(Array(0)).map(() => Line.make())
+    var boxes       = Array.from(Array(MODEL_COUNT)).map(() => Box.makeStroke())
+    var triangles   = Array.from(Array(MODEL_COUNT)).map(() => Triangle.makeStroke())
+
+    this.models = [
+      ...lines,
+      ...boxes,
+      ...triangles
+    ]
   }
 
   clear() {
     this.pixels.setAll(WHITE)
   }
 
-  beginFrame() {
+  prepare() {
     this.clear()
   }
 
-  updateModel(ms) {
+  processModels(ms) {
     const isOut = p => (p.x + p.speed) <= 0 || (p.x + p.width) > this.width
 
-    for (const box of this.boxes) {
-      if (isOut(box)) box.speed = -box.speed
-      box.color = COLORS[randomInt(0, COLORS.length - 1)]
-      box.move()
-    }
-
-    for (const triangle of this.triangles) {
-      if (isOut(triangle)) triangle.speed = -triangle.speed
-      triangle.color = COLORS[randomInt(0, COLORS.length - 1)]
-      triangle.move()
-    }
-
-    for (const line of this.lines) {
-      if (isOut(line)) line.speed = -line.speed
-      line.color = COLORS[randomInt(0, COLORS.length - 1)]
-      line.move()
+    for (const model of this.models) {
+      if (isOut(model)) { model.speed = -model.speed }
+      model.color = COLORS[randomInt(0, COLORS.length - 1)]
+      model.move()
     }
   }
 
   composeFrame(ms) {
   }
 
-  putFrame() {
-    for (const box of this.boxes) {
-      if (box.fill) {
-        this.pixels.fillRectangle(box.x, box.y, box.width, box.height, box.color)
-      } else {
-        this.pixels.strokeRectangle(box.x, box.y, box.width, box.height, box.color)
-      }
+  draw() {
+    for (const model of this.models) {
+      model.draw(this.pixels)
     }
 
-    for (const triangle of this.triangles) {
-      if (triangle.fill) {
-        this.pixels.fillTriangle(triangle.v1, triangle.v2, triangle.v3, triangle.color)
-      } else {
-        this.pixels.strokeTriangle(triangle.v1, triangle.v2, triangle.v3, triangle.color)
-      }
-    }
+    this.renderer.draw()
+  }
+}
 
-    for (const line of this.lines) {
-      this.pixels.fillLine(line.v1, line.v2, line.color)
-    }
-
-    this.ctx.putImageData(this.pixels.imageData, 0, 0)
+class Overlay {
+  constructor (ctx) {
+    this.ctx = ctx
   }
 
-  overlay() {
-    if (this.stdout) this.ctx.fillText(this.stdout, 10, 10)
+  drawText(text, x, y) {
+    this.ctx.fillText(text, x, y)
   }
 }
 
@@ -408,17 +413,22 @@ class Sandbox {
     this.aspect = this.width / this.height
     this.msPerFrame = 1000 / props.fps
     this.nextFrame = props.raf
-    this.canvas = props.canvas
+
+    var ctx = props.canvas.getContext('2d')
+    var pixels = new PixelManager(ctx.getImageData(0, 0, this.width, this.height))
+    var renderer = { draw: () => ctx.putImageData(pixels.imageData, 0, 0) }
+    this.scene = new Scene(this.width, this.height, pixels, renderer)
+    this.overlay = new Overlay(ctx)
     this.initialize()
   }
 
   initialize() {
     this.lastRun = performance.now()
     this.lastFrame = 0
-    this.scene = new Scene(this.canvas)
   }
 
   requestFrame() {
+    this.overlay.drawText(`Sandbox | model: ${this.scene.models.length}`, this.width - 10, 10)
     if (RENDER_ONLY_ONCE) {
       this.render(0)
     } else {
@@ -438,11 +448,10 @@ class Sandbox {
   }
 
   render(time) {
-    this.scene.beginFrame()
-    this.scene.updateModel(time)
+    this.scene.prepare()
+    this.scene.processModels(time)
     this.scene.composeFrame(time)
-    this.scene.putFrame()
-    this.scene.overlay()
+    this.scene.draw()
   }
 
   currentFrame() {
