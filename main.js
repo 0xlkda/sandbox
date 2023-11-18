@@ -1,4 +1,8 @@
 var RENDER_ONLY_ONCE = false
+var COLORFUL_MODE = true
+var SHOW_VERTEX = true
+var SHOW_OUTLINE = true
+
 var EPSILON = Number.EPSILON
 var PI = Math.PI
 var MIN = Math.min
@@ -7,7 +11,8 @@ var ABS = Math.abs
 var SIN = Math.sin
 var COS = Math.cos
 var ROUND = Math.round
-var MODEL_COUNT = 10
+var BOX_COUNT = 2
+var TRIANGLE_COUNT = 2
 var randomInt = (min, max) => Math.floor(Math.random() * (max - min + 1) + min)
 
 class Vector {
@@ -17,7 +22,7 @@ class Vector {
 }
 
 class Vector2 extends Vector {
-  constructor (x, y) {
+  constructor (x = 0, y = x) {
     super()
     this.x = x
     this.y = y
@@ -38,7 +43,7 @@ class Vector2 extends Vector {
 }
 
 class Vector3 extends Vector {
-  constructor (x, y, z) {
+  constructor (x = 0, y = x, z = x) {
     super()
     this.x = x
     this.y = y
@@ -149,7 +154,7 @@ var BLACK = new Color(0, 0, 0)
 var RED = new Color(255, 0, 0)
 var GREEN = new Color(0, 255, 0)
 var BLUE = new Color(0, 0, 255)
-var COLORS = [RED, GREEN, BLUE]
+var COLORS = COLORFUL_MODE ? [RED, GREEN, BLUE] : [BLUE]
 
 function lerpRGB(color1, color2, t) {
   var r = color1.r + ((color2.r - color1.r) * t)
@@ -291,11 +296,15 @@ class PixelManager {
   }
 
   fillTriangle(v1, v2, v3, color) {
+    this.fillLine(v1, v2, color)
+    this.fillLine(v2, v3, color)
+    this.fillLine(v3, v1, color)
+
     // Finds the bounding box with all candidate pixels
-    var x_min = MIN(MIN(v1.x, v2.x), v3.x)
-    var y_min = MIN(MIN(v1.y, v2.y), v3.y)
-    var x_max = MAX(MAX(v1.x, v2.x), v3.x)
-    var y_max = MAX(MAX(v1.y, v2.y), v3.y)
+    var xMin = MIN(MIN(v1.x, v2.x), v3.x)
+    var yMin = MIN(MIN(v1.y, v2.y), v3.y)
+    var xMax = MAX(MAX(v1.x, v2.x), v3.x)
+    var yMax = MAX(MAX(v1.y, v2.y), v3.y)
 
     // Compute the constant delta_s that will be used for the horizontal and vertical steps
     var delta_w1_col = (v2.y - v3.y)
@@ -311,20 +320,20 @@ class PixelManager {
     var bias3 = this.isTopLeft(v1, v2) ? 0 : -1
 
     // Compute the edge functions for the fist (top-left) point
-    var p0 = { x: x_min, y: y_min}
+    var p0 = { x: xMin, y: yMin}
     var w1_row = this.edgeCross(v2, v3, p0) + bias1
     var w2_row = this.edgeCross(v3, v1, p0) + bias2
     var w3_row = this.edgeCross(v1, v2, p0) + bias3
 
     // Loop all candidate pixels inside the bounding box
-    for (var y = y_min; y <= y_max; y++) {
+    for (var y = yMin; y <= yMax; y++) {
       var w1 = w1_row
       var w2 = w2_row
       var w3 = w3_row
 
-      for (var x = x_min; x <= x_max; x++) {
-        var is_inside = w1 >= 0 && w2 >= 0 && w3 >= 0
-        if (is_inside) {
+      for (var x = xMin; x <= xMax; x++) {
+        var isInside = w1 >= 0 && w2 >= 0 && w3 >= 0
+        if (isInside) {
           this.setLocation(x, y, color)
         }
         w1 += delta_w1_col
@@ -348,6 +357,7 @@ class PixelManager {
 class Position extends Vector3 {
   constructor(x, y, z) { 
     super(x, y, z)
+    this.toString = () => `${x}, ${y}`
   }
 }
 
@@ -356,8 +366,8 @@ class Triangle {
     this.v1 = v1
     this.v2 = v2
     this.v3 = v3
-    this.speed = 1
-    this.color = BLACK
+    this.vertices = [v1, v2, v3]
+    this.toString = () => `v1: ${v1.x} ${v1.y} | v2: ${v2.x} ${v2.y} | v3: ${v3.x} ${v3.y}`
   }
 
   draw(pixels) {
@@ -369,30 +379,39 @@ class Triangle {
   }
 
   move() {
+    this.v1.translateX(this.speed)
+    this.v2.translateX(this.speed)
+    this.v3.translateX(this.speed)
+
+    // this.v1.translateY(this.speed)
+    // this.v2.translateY(this.speed)
+    // this.v3.translateY(this.speed)
   }
 
   static make() {
-    var v1 = new Vector2(randomInt(20, 400), randomInt(20, 400))
-    var v2 = new Vector2(randomInt(20, 400), randomInt(20, 400))
-    var v3 = new Vector2(randomInt(20, 400), randomInt(20, 400))
-
+    var v1 = new Position(randomInt(100, 300), randomInt(100, 300))
+    var v2 = new Position(randomInt(100, 300), randomInt(100, 300))
+    var v3 = new Position(randomInt(100, 300), randomInt(100, 300))
     var speed = randomInt(1, 10)
     var triangle =  new Triangle(v1, v2, v3)
+
     triangle.fill = true
     triangle.speed = speed 
+    triangle.friction = 0.5
 
     return triangle
   }
 
   static makeStroke() {
-    var v1 = new Vector2(randomInt(20, 400), randomInt(20, 400))
-    var v2 = new Vector2(randomInt(20, 400), randomInt(20, 400))
-    var v3 = new Vector2(randomInt(20, 400), randomInt(20, 400))
-
+    var v1 = new Position(randomInt(100, 300), randomInt(100, 300))
+    var v2 = new Position(randomInt(100, 300), randomInt(100, 300))
+    var v3 = new Position(randomInt(100, 300), randomInt(100, 300))
     var speed = randomInt(1, 10)
     var triangle =  new Triangle(v1, v2, v3)
+
     triangle.fill = false
     triangle.speed = speed 
+    triangle.friction = 0.5
 
     return triangle
   }
@@ -401,24 +420,30 @@ class Triangle {
 
 class Box {
   constructor(x, y, width, height) {
-    this.position = new Position(x, y, 1)
+    this.vertices = [
+      new Position(x, y),
+      new Position(x + width, y),
+      new Position(x + width, y + height),
+      new Position(x, y + height),
+    ]
+    this.origin = this.vertices[0]
     this.width = width
     this.height = height
-    this.speed = 10
-    this.friction = 0.5
   }
 
   draw(pixels) {
     if (this.fill) {
-      pixels.fillRectangle(this.position.x, this.position.y, this.width, this.height, this.color)
+      pixels.fillRectangle(this.origin.x, this.origin.y, this.width, this.height, this.color)
     } else {
-      pixels.strokeRectangle(this.position.x, this.position.y, this.width, this.height, this.color)
+      pixels.strokeRectangle(this.origin.x, this.origin.y, this.width, this.height, this.color)
     }
   }
 
   move() {
-    this.position.translateX(this.speed)
-    this.position.translateY(this.speed)
+    for (const position of this.vertices) {
+      position.translateX(this.speed)
+      position.translateY(this.speed)
+    }
   }
 
   static make() {
@@ -429,9 +454,11 @@ class Box {
     var box =  new Box(x, y, size, size)
     box.fill = true
     box.speed = speed 
+    box.friction = 0.5
 
     return box
   }
+
   static makeStroke() {
     var [x, y] = new Vector2(randomInt(0, 300), randomInt(0, 300)).elements
     var size = randomInt(10, 50)
@@ -440,6 +467,7 @@ class Box {
     var box =  new Box(x, y, size, size)
     box.fill = false
     box.speed = speed 
+    box.friction = 0.5
 
     return box
   }
@@ -449,6 +477,7 @@ class Line {
   constructor(v1, v2) {
     this.v1 = v1
     this.v2 = v2
+    this.vertices = [v1, v2]
   }
 
   draw(pixels) {
@@ -458,8 +487,8 @@ class Line {
   move() {}
 
   static make() {
-    var v1 = new Vector2(randomInt(20, 400), randomInt(20, 400))
-    var v2 = new Vector2(randomInt(20, 400), randomInt(20, 400))
+    var v1 = new Position(randomInt(20, 400), randomInt(20, 400))
+    var v2 = new Position(randomInt(20, 400), randomInt(20, 400))
     return new Line(v1, v2)
   }
 } 
@@ -472,15 +501,17 @@ class Scene {
     this.renderer = renderer
 
     // models
-    var lines       = Array.from(Array(0)).map(() => Line.make())
-    var boxes       = Array.from(Array(MODEL_COUNT)).map(() => Box.makeStroke())
-    var triangles   = Array.from(Array(MODEL_COUNT)).map(() => Triangle.makeStroke())
+    var boxes       = Array.from(Array(BOX_COUNT)).map(() => Box.make())
+    var triangles   = Array.from(Array(TRIANGLE_COUNT)).map(() => Triangle.make())
 
     this.models = [
-      ...lines,
       ...boxes,
       ...triangles
     ]
+  }
+
+  isPointInsideScreen(point) {
+    return point.x < this.width && point.y < this.height && point.x > 0 && point.y > 0
   }
 
   clear() {
@@ -492,18 +523,17 @@ class Scene {
   }
 
   processModels(ms) {
-    const isOffScreen = (model) => {
-      var outX = (model.position.x + model.speed + model.width)  >= this.width  || model.position.x + model.speed < 0
-      var outY = (model.position.y + model.speed + model.height) >= this.height || model.position.y + model.speed < 0
-      return outX || outY
+    const isOnScreen = (model) => {
+      if (!model.vertices) throw new Error('No Vertices', model)
+      return model.vertices.every((point) => this.isPointInsideScreen(point))
     }
 
     for (const model of this.models) {
       model.color = COLORS[randomInt(0, COLORS.length - 1)]
 
-      if (model.position && isOffScreen(model)) { 
-        model.speed = model.speed * (model.friction || 1)
-        model.speed = -model.speed 
+      if (!isOnScreen(model)) {
+        // model.speed = model.speed * (model.friction || 1)
+        model.speed = -model.speed
       }
 
       if (ABS(model.speed) > EPSILON) { model.move() }
@@ -529,6 +559,34 @@ class Overlay {
 
   drawText(text, x, y) {
     this.ctx.fillText(text, x, y)
+  }
+
+  drawOutline(models) {
+    this.ctx.save()
+    this.ctx.strokeStyle = 'red'
+    for (const model of models) {
+      var vertices = model.vertices
+      for (let index = 0; index < vertices.length; index++) {
+        const v = vertices[index]
+        const vNext = (vertices[index + 1] || vertices[0])
+        this.ctx.beginPath()
+        this.ctx.moveTo(v.x, v.y)
+        this.ctx.lineTo(vNext.x, vNext.y)
+        this.ctx.stroke()
+      }
+    }
+    this.ctx.restore()
+  }
+
+  drawVertex(models) {
+    this.ctx.save()
+    for (const model of models) {
+      for (const v of model.vertices) {
+        this.ctx.fillStyle = 'red'
+        this.ctx.fillText(v.toString(), v.x, v.y)
+      }
+    }
+    this.ctx.restore()
   }
 }
 
@@ -578,6 +636,14 @@ class Sandbox {
     this.scene.composeFrame(time)
     this.scene.draw()
     this.overlay.drawText(`Sandbox | model: ${this.scene.models.length}`, 10, this.height - 10)
+
+    if (SHOW_OUTLINE) {
+      this.overlay.drawOutline(this.scene.models)
+    }
+
+    if (SHOW_VERTEX) {
+      this.overlay.drawVertex(this.scene.models)
+    }
   }
 
   currentFrame() {
