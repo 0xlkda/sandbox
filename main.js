@@ -46,49 +46,6 @@ function lerpRGB(color1, color2, t) {
   return new Color(r, g, b)
 }
 
-function makeBox() {
-  var [x, y] = new Vector2(randomInt(0, 300), randomInt(0, 300)).elements
-  var size = randomInt(10, 50)
-  var speed = randomInt(1, 10)
-
-  var box =  new Box(x, y, size, size)
-  box.fill = true
-  box.speed = speed 
-
-  return box
-}
-
-function makeStrokeBox() {
-  var box = makeBox()
-  box.fill = false
-  return box
-}
-
-function makeTriangle() {
-  var v1 = new Vector2(randomInt(20, 400), randomInt(20, 400))
-  var v2 = new Vector2(randomInt(20, 400), randomInt(20, 400))
-  var v3 = new Vector2(randomInt(20, 400), randomInt(20, 400))
-
-  var speed = randomInt(1, 10)
-  var triangle =  new Triangle(v1, v2, v3)
-  triangle.fill = true
-  triangle.speed = speed 
-
-  return triangle
-}
-
-function makeStrokeTriangle() {
-  var triangle = makeTriangle()
-  triangle.fill = false 
-  return triangle
-}
-
-function makeLine() {
-  var v1 = new Vector2(randomInt(20, 400), randomInt(20, 400))
-  var v2 = new Vector2(randomInt(20, 400), randomInt(20, 400))
-  return new Line(v1, v2)
-}
-
 class PixelManager {
   BYTES_PER_PIXEL = 4
 
@@ -134,6 +91,59 @@ class PixelManager {
     return { x, y }
   }
 
+  // LINE
+  fillLine(v1, v2, color) {
+    var v1x = v1.x, v1y = v1.y
+    var v2x = v2.x, v2y = v2.y
+    var dx = v2x - v1x
+    var dy = v2y - v1y
+
+    if (dx === 0 && dy === 0) {
+      this.setLocation(v1x, v1y, color)
+    } else if (ABS(dy) > ABS(dx)) {
+      if (dy < 0) {
+        var _v1 = v1
+        var v1 = v2
+        var v2 = _v1
+        var v1x = v1.x, v1y = v1.y
+        var v2x = v2.x, v2y = v2.y
+      }
+
+      var slope = dx / dy
+      var y = v1y
+      var lastY
+      for(var x = v1x; y < v2y; y += 1, x += slope) {
+        lastY = y
+        this.setLocation(ROUND(x), ROUND(lastY), color)
+      }
+
+      if(v2y > lastY ) {
+        this.setLocation(ROUND(v2x), ROUND(v2y), color)
+      }
+    } else {
+      if (dx < 0) {
+        var _v1 = v1
+        var v1 = v2
+        var v2 = _v1
+        var v1x = v1.x, v1y = v1.y
+        var v2x = v2.x, v2y = v2.y
+      }
+
+      var slope = dy / dx
+      var x = v1x
+      var lastX
+      for(var y = v1y; x < v2x; x += 1, y += slope) {
+        lastX = x
+        this.setLocation(ROUND(lastX), ROUND(y), color)
+      }
+
+      if( v2x > lastX ) {
+        this.setLocation(ROUND(v2x), ROUND(v2y), color)
+      }
+    }
+  }
+
+  // BOX
   fillRectangle(x0, y0, width, height, color) {
     for (var y = y0; y < y0 + height; y++) {
       for (var x = x0; x < x0 + width; x++) {
@@ -154,6 +164,7 @@ class PixelManager {
     this.fillLine(vertex4, vertex1, color)
   }
 
+  // TRIANGLE
   isTopLeft(start, end) {
     var edge = { x: end.x - start.x, y: end.y - start.y}
     var is_top_edge = edge.y == 0 && edge.x > 0
@@ -220,57 +231,6 @@ class PixelManager {
     this.fillLine(v2, v3, color)
     this.fillLine(v3, v1, color)
   }
-
-  fillLine(v1, v2, color) {
-    var v1x = v1.x, v1y = v1.y
-    var v2x = v2.x, v2y = v2.y
-    var dx = v2x - v1x
-    var dy = v2y - v1y
-
-    if (dx === 0 && dy === 0) {
-      this.setLocation(v1x, v1y, color)
-    } else if (ABS(dy) > ABS(dx)) {
-      if (dy < 0) {
-        var _v1 = v1
-        var v1 = v2
-        var v2 = _v1
-        var v1x = v1.x, v1y = v1.y
-        var v2x = v2.x, v2y = v2.y
-      }
-
-      var slope = dx / dy
-      var y = v1y
-      var lastY
-      for(var x = v1x; y < v2y; y += 1, x += slope) {
-        lastY = y
-        this.setLocation(ROUND(x), ROUND(lastY), color)
-      }
-
-      if(v2y > lastY ) {
-        this.setLocation(ROUND(v2x), ROUND(v2y), color)
-      }
-    } else {
-      if (dx < 0) {
-        var _v1 = v1
-        var v1 = v2
-        var v2 = _v1
-        var v1x = v1.x, v1y = v1.y
-        var v2x = v2.x, v2y = v2.y
-      }
-
-      var slope = dy / dx
-      var x = v1x
-      var lastX
-      for(var y = v1y; x < v2x; x += 1, y += slope) {
-        lastX = x
-        this.setLocation(ROUND(lastX), ROUND(y), color)
-      }
-
-      if( v2x > lastX ) {
-        this.setLocation(ROUND(v2x), ROUND(v2y), color)
-      }
-    }
-  }
 }
 
 class Triangle {
@@ -285,6 +245,33 @@ class Triangle {
 
   move() {
   }
+
+  static make() {
+    var v1 = new Vector2(randomInt(20, 400), randomInt(20, 400))
+    var v2 = new Vector2(randomInt(20, 400), randomInt(20, 400))
+    var v3 = new Vector2(randomInt(20, 400), randomInt(20, 400))
+
+    var speed = randomInt(1, 10)
+    var triangle =  new Triangle(v1, v2, v3)
+    triangle.fill = true
+    triangle.speed = speed 
+
+    return triangle
+  }
+
+  static makeStroke() {
+    var v1 = new Vector2(randomInt(20, 400), randomInt(20, 400))
+    var v2 = new Vector2(randomInt(20, 400), randomInt(20, 400))
+    var v3 = new Vector2(randomInt(20, 400), randomInt(20, 400))
+
+    var speed = randomInt(1, 10)
+    var triangle =  new Triangle(v1, v2, v3)
+    triangle.fill = false
+    triangle.speed = speed 
+
+    return triangle
+  }
+
 }
 
 class Box {
@@ -300,6 +287,29 @@ class Box {
   move() {
     this.x += this.speed
   }
+
+  static make() {
+    var [x, y] = new Vector2(randomInt(0, 300), randomInt(0, 300)).elements
+    var size = randomInt(10, 50)
+    var speed = randomInt(1, 10)
+
+    var box =  new Box(x, y, size, size)
+    box.fill = true
+    box.speed = speed 
+
+    return box
+  }
+  static makeStroke() {
+    var [x, y] = new Vector2(randomInt(0, 300), randomInt(0, 300)).elements
+    var size = randomInt(10, 50)
+    var speed = randomInt(1, 10)
+
+    var box =  new Box(x, y, size, size)
+    box.fill = false
+    box.speed = speed 
+
+    return box
+  }
 }
 
 class Line {
@@ -309,6 +319,11 @@ class Line {
   }
 
   move() {}
+  static make() {
+    var v1 = new Vector2(randomInt(20, 400), randomInt(20, 400))
+    var v2 = new Vector2(randomInt(20, 400), randomInt(20, 400))
+    return new Line(v1, v2)
+  }
 } 
 
 class Scene {
@@ -319,9 +334,9 @@ class Scene {
     this.pixels = new PixelManager(this.ctx.getImageData(0, 0, this.width, this.height))
 
     // models
-    this.lines       = Array.from(Array(0)).map(() => makeLine())
-    this.boxes       = Array.from(Array(MODEL_COUNT)).map(() => makeStrokeBox())
-    this.triangles   = Array.from(Array(MODEL_COUNT)).map(() => makeStrokeTriangle())
+    this.lines       = Array.from(Array(0)).map(() => Line.make())
+    this.boxes       = Array.from(Array(MODEL_COUNT)).map(() => Box.makeStroke())
+    this.triangles   = Array.from(Array(MODEL_COUNT)).map(() => Triangle.makeStroke())
   }
 
   clear() {
@@ -357,7 +372,7 @@ class Scene {
   composeFrame(ms) {
   }
 
-  endFrame() {
+  putFrame() {
     for (const box of this.boxes) {
       if (box.fill) {
         this.pixels.fillRectangle(box.x, box.y, box.width, box.height, box.color)
@@ -426,7 +441,7 @@ class Sandbox {
     this.scene.beginFrame()
     this.scene.updateModel(time)
     this.scene.composeFrame(time)
-    this.scene.endFrame()
+    this.scene.putFrame()
     this.scene.overlay()
   }
 
