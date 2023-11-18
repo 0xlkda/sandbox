@@ -428,7 +428,6 @@ class Sandbox {
   }
 
   requestFrame() {
-    this.overlay.drawText(`Sandbox | model: ${this.scene.models.length}`, this.width - 10, 10)
     if (RENDER_ONLY_ONCE) {
       this.render(0)
     } else {
@@ -452,6 +451,7 @@ class Sandbox {
     this.scene.processModels(time)
     this.scene.composeFrame(time)
     this.scene.draw()
+    this.overlay.drawText(`Sandbox | model: ${this.scene.models.length}`, 10, this.height - 10)
   }
 
   currentFrame() {
